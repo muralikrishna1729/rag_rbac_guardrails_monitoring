@@ -15,11 +15,15 @@ def build_rag_chain(persist_directory: str):
     vectorstore = Chroma(persist_directory= persist_directory ,embedding_function= text_embedding)
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})   
 
-    llm = HuggingFaceEndpoint(
-        repo_id="meta-llama/Llama-3.1-8B-Instruct",
-        task="text-generation",
-        temperature = 0.1 ,# low temp = more factual
+    # llm = HuggingFaceEndpoint(
+    #     repo_id="meta-llama/Llama-3.1-8B-Instruct",
+    #     task="text-generation",
+    #     temperature = 0.1 ,# low temp = more factual
 
+    # )
+    llm = ChatGroq(
+        model="llama-3.1-8b-instant",
+        temperature=0
     )
 
     prompt = ChatPromptTemplate.from_template(
@@ -33,7 +37,9 @@ def build_rag_chain(persist_directory: str):
                 """
     )
 
-    chain = ({"context": retriever | format_docs ,"question":RunnablePassthrough()}| prompt | ChatHuggingFace(llm=llm) | StrOutputParser())
+    # chain = ({"context": retriever | format_docs ,"question":RunnablePassthrough()}| prompt | ChatHuggingFace(llm=llm) | StrOutputParser())
+    chain = ({"context": retriever | format_docs ,"question":RunnablePassthrough()}| prompt | llm | StrOutputParser())
+
     return chain
 
 def format_docs(docs):
@@ -41,7 +47,7 @@ def format_docs(docs):
 
 if __name__== "__main__":
     chain = build_rag_chain("./chroma_db")
-    response = chain.invoke("What is the leave policy?")
+    response = chain.invoke("What is the company finance condition?")
     print(response)
 
 
