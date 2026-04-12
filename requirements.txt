@@ -1,0 +1,12 @@
+langchain
+langchain-community
+langchain-groq
+chromadb
+pypdf
+sentence-transformers
+python-dotenv
+streamlit
+ragas
+langsmith
+fastapi
+uvicorn
