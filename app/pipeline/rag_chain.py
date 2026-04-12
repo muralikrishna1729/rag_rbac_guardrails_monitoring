@@ -8,6 +8,7 @@ from langchain_chroma import Chroma
 from dotenv import load_dotenv
 import os
 from app.auth.users import get_user_role
+from app.guardrails.guardrail import check_input_guardrail,check_output_guardrail
 
 load_dotenv()
 text_embedding = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -21,9 +22,8 @@ def build_rag_chain(persist_directory: str, role:str):
     else:
         print("Admin access granted: Searching all departments.")
 
-    retriever = vectorstore.as_retriever(
-            search_kwargs=search_kwargs     
-        )   
+    retriever = vectorstore.as_retriever(search_kwargs=search_kwargs)   
+
     # llm = HuggingFaceEndpoint(
     #     repo_id="meta-llama/Llama-3.1-8B-Instruct",
     #     task="text-generation",
@@ -47,19 +47,39 @@ def build_rag_chain(persist_directory: str, role:str):
     )
 
     # chain = ({"context": retriever | format_docs ,"question":RunnablePassthrough()}| prompt | ChatHuggingFace(llm=llm) | StrOutputParser())
-    chain = ({"context": retriever | format_docs ,"question":RunnablePassthrough()}| prompt | llm | StrOutputParser())
+    chain = ({"context": retriever | (lambda docs:check_access(docs,role)) ,"question":RunnablePassthrough()}| prompt | llm | StrOutputParser())
 
     return chain
 
 def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
+def check_access(docs,role):
+    if not docs:
+        return "I don't have access to that information or no matching documents were found."
+    else:
+        return format_docs(docs)
+
+def ask_question(username:str, question:str):
+    role = get_user_role(username)
+    if not role:
+        return "Access Denied: User not recognized."
+    violation = check_input_guardrail(question)
+    if violation:
+        return violation
+    
+    chain = build_rag_chain("./chroma_db",role = role)
+    raw_response = chain.invoke(question)
+    safe_response = check_output_guardrail(raw_response)
+    return safe_response
+
+
 if __name__== "__main__":
-    chain = build_rag_chain("./chroma_db", role ="hr")
-    response = chain.invoke("What is the company finance condition?")
+    response = ask_question("alice", "What is the company finance condition?")
     if not response:
         print("I don't have access to that information or no matching documents were found.")
     print(response)
+
 
 
 
