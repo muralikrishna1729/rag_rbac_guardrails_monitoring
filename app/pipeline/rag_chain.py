@@ -7,14 +7,23 @@ from langchain_groq import ChatGroq
 from langchain_chroma import Chroma
 from dotenv import load_dotenv
 import os
+from app.auth.users import get_user_role
 
 load_dotenv()
+text_embedding = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-def build_rag_chain(persist_directory: str):
-    text_embedding = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+def build_rag_chain(persist_directory: str, role:str):
     vectorstore = Chroma(persist_directory= persist_directory ,embedding_function= text_embedding)
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})   
 
+    search_kwargs = {"k":3}
+    if role != 'admin':
+        search_kwargs["filter"] = {"$or" : [{"role":role},{"role":"general"}]}
+    else:
+        print("Admin access granted: Searching all departments.")
+
+    retriever = vectorstore.as_retriever(
+            search_kwargs=search_kwargs     
+        )   
     # llm = HuggingFaceEndpoint(
     #     repo_id="meta-llama/Llama-3.1-8B-Instruct",
     #     task="text-generation",
@@ -46,9 +55,12 @@ def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
 if __name__== "__main__":
-    chain = build_rag_chain("./chroma_db")
+    chain = build_rag_chain("./chroma_db", role ="hr")
     response = chain.invoke("What is the company finance condition?")
+    if not response:
+        print("I don't have access to that information or no matching documents were found.")
     print(response)
+
 
 
 
