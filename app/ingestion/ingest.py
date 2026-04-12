@@ -1,9 +1,13 @@
 import os
 from pathlib import Path
 from langchain_community.document_loaders import CSVLoader, TextLoader, DirectoryLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter 
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+
 
 def load_documents(data_path:str):
+    """Loading: DirectoryLoader pulls the raw text."""
     all_docs = []
     text_loader = DirectoryLoader(
         data_path,
@@ -18,6 +22,9 @@ def load_documents(data_path:str):
     all_docs.extend(text_loader.load())
     all_docs.extend(csv_loader.load())
 
+    """
+    Tagging:adds the role (department) to the metadata.
+    """
     for doc in all_docs:
         source_path = doc.metadata.get("source", "")
         if source_path:
@@ -29,22 +36,45 @@ def load_documents(data_path:str):
     return all_docs
 
 def split_documents(all_docs:list):
-    splitter = RecursiveCharacterTextSplitter(chunk_size = 1000, chunk_overlap = 200)
+    """
+    Splitting: RecursiveCharacterTextSplitter breaks long docs into 1000-character chunks (while keeping that role tag on every chunk).
+
+    """
+    splitter = RecursiveCharacterTextSplitter(chunk_size = 1000, chunk_overlap = 200, separators=["\n\n", "\n", ".", " ", ""])
     chunks = splitter.split_documents(all_docs)
     print(f"Success: Split into {len(chunks)} chunks.")
     return chunks
 
+def store_in_chroma(chunks:list,persist_directory:str):
+    """
+    Embedding: HuggingFaceEmbeddings converts the text into numbers (vectors).
+
+    """
+    embeddings = HuggingFaceEmbeddings(model_name = "all-MiniLM-L6-v2")
+    """
+    Storage: Chroma saves the vectors and metadata to disk.
+    """
+    vector_db = Chroma.from_documents(
+        documents = chunks,
+        embedding = embeddings,
+        persist_directory = persist_directory
+    )
+    print(f"Success: Stored chunks in ChromaDB at {persist_directory}")
+    return vector_db
 
 
 if __name__ == "__main__":
-    data_path = "./resources"
+    data_path = "./resources/data"
+    DB_path = "./chroma_db"
     print(f"Starting load from: {data_path}...")
+        
+    raw_docs = load_documents(data_path) 
+    print(f"Total documents loaded: {len(raw_docs)}")
     
-    results = load_documents(data_path)
-    print("\n--- RESULTS ---")
-    print(f"Total documents loaded: {len(results)}")
-    
-    if results:
-        for result in results:
-            print(f"Sample Metadata from first doc: {result.metadata}")
-            print(f"Sample Content: {result.page_content[:20]}...")
+    if raw_docs:
+        doc_chunks = split_documents(raw_docs)
+        vector_store = store_in_chroma(doc_chunks,DB_path)
+        print("\n--- INGESTION COMPLETE ---")
+        # Verify the role metadata exists in a sample chunk
+        print(f"Sample Chunk Metadata: {doc_chunks[0].metadata}")
+
