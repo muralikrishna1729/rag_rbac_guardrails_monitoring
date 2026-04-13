@@ -4,6 +4,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
 load_dotenv()
+import os
 
 
 PII_PATTERNS = [
@@ -11,6 +12,10 @@ PII_PATTERNS = [
     r'\b\d{10}\b',                                      # phone
     r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}\b'                  # aadhaar
 ]
+GREETINGS = ["hi", "hello", "hey", "good morning", "good afternoon", "hola"]
+COMPANY_DOMAIN = os.getenv("COMPANY_DOMAIN", "company.com").lower()
+
+
 llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
 
 def detect_pii(text:str)->bool:
@@ -23,17 +28,19 @@ def detect_pii(text:str)->bool:
 def check_scope(question: str) -> bool:
     prompt = ChatPromptTemplate.from_template(
         """
-        Is this question related to company business such as HR, finance, marketing, or engineering?
+        You are a classifier. Determine if the question is related to HR, Finance, Marketing, Engineering, IT support, policies, contact emails or  general Company Operations.
         Question: {question}
-        Answer only YES or NO.
+        Answer only with the word 'YES' or 'NO'.
         """
     )
     chain = prompt | llm | StrOutputParser()
     result = chain.invoke({"question":question})
-    return "YES" in result.upper()
+    return "YES" in result.strip().upper()
 
 
 def check_input_guardrail(question: str)->str:
+    if question.lower().strip() in GREETINGS:
+        return None
     if detect_pii(question):
         return "Your query contains sensitive personal information. Please remove it."
     if not check_scope(question):
@@ -44,6 +51,11 @@ def check_input_guardrail(question: str)->str:
 def check_output_guardrail(response: str) -> str:
     for pattern in PII_PATTERNS:
         response = re.sub(pattern, "[REDACTED]", response)
+    email_pattern = PII_PATTERNS[0]
+    found_emails = re.findall(email_pattern, response)
+    for email in found_emails:
+        if not email.lower().endswith(f"@{COMPANY_DOMAIN}"):
+            response = response.replace(email, "[REDACTED]")
     return response
 
 if __name__ == "__main__":

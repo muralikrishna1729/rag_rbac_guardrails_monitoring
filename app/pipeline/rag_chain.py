@@ -11,9 +11,12 @@ from app.auth.users import get_user_role
 from app.guardrails.guardrail import check_input_guardrail,check_output_guardrail
 
 load_dotenv()
+
 text_embedding = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 def build_rag_chain(persist_directory: str, role:str):
+    if not os.path.exists(persist_directory):
+        raise FileNotFoundError(f"Vector database not found at {persist_directory}")
     vectorstore = Chroma(persist_directory= persist_directory ,embedding_function= text_embedding)
 
     search_kwargs = {"k":3}
@@ -36,14 +39,28 @@ def build_rag_chain(persist_directory: str, role:str):
     )
 
     prompt = ChatPromptTemplate.from_template(
-                """
-                You are a helpful assistant for company employees.
-                Use only the context below to answer the question.
-                If the answer is not in the context, say "I don't have that information."
-                Context: {context}
-                Question: {question}
-                Answer:
-                """
+        """
+        You are a professional and friendly Company AI Assistant.
+
+        Instructions:
+            1. GREETINGS: If the user says 'Hi' or 'Hello', reply: "Hello! I'm your company assistant. How can I help you today?"
+            2. IDENTITY: If asked 'Who are you?'or 'How do you doing' like that reply: "I am a RAG-powered assistant specialized in company policies.I'm Here to assist you"
+            3. EXCEPTIONS: 
+               - HR Email: hr@company.com
+               - Leave Portal: https://portal.company.com/leave
+            4. RAG: For all other questions, use the context below. 
+            5. FALLBACK: If info is not in context or exceptions, say "I don't have that information."
+
+        STRICT RULES:
+            1. Use the context below to answer questions.
+            2. If the answer is NOT in the context AND not in the 'EXCEPTIONS' above, 
+               say: "I'm sorry, I don't have that information in our records."
+            3. Do not make up facts.
+
+        Context: {context}
+        Question: {question}
+        Answer:
+        """
     )
 
     # chain = ({"context": retriever | format_docs ,"question":RunnablePassthrough()}| prompt | ChatHuggingFace(llm=llm) | StrOutputParser())
