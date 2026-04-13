@@ -75,7 +75,7 @@ def ask_question(username:str, question:str):
 
 
 if __name__== "__main__":
-    response = ask_question("alice", "What is the company finance condition?")
+    response = ask_question("alice", "How many candidates are onboarded in this year to the company?")
     if not response:
         print("I don't have access to that information or no matching documents were found.")
     print(response)

@@ -1,6 +1,9 @@
 import re 
-from llm_guard.input_scanners import BanTopics
-
+from langchain_groq import ChatGroq
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from dotenv import load_dotenv
+load_dotenv()
 
 
 PII_PATTERNS = [
@@ -8,6 +11,8 @@ PII_PATTERNS = [
     r'\b\d{10}\b',                                      # phone
     r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}\b'                  # aadhaar
 ]
+llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
+
 def detect_pii(text:str)->bool:
     for pattern in PII_PATTERNS:
         if re.search(pattern, text):
@@ -16,9 +21,17 @@ def detect_pii(text:str)->bool:
 
 
 def check_scope(question: str) -> bool:
-    scanner = BanTopics(topics=["politics", "violence", "entertainment","confidential","secrets"])
-    sanitized_question, is_valid, risk_score = scanner.scan(question)
-    return is_valid
+    prompt = ChatPromptTemplate.from_template(
+        """
+        Is this question related to company business such as HR, finance, marketing, or engineering?
+        Question: {question}
+        Answer only YES or NO.
+        """
+    )
+    chain = prompt | llm | StrOutputParser()
+    result = chain.invoke({"question":question})
+    return "YES" in result.upper()
+
 
 def check_input_guardrail(question: str)->str:
     if detect_pii(question):
