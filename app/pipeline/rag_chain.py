@@ -66,7 +66,7 @@ def build_rag_chain(persist_directory: str, role:str):
     # chain = ({"context": retriever | format_docs ,"question":RunnablePassthrough()}| prompt | ChatHuggingFace(llm=llm) | StrOutputParser())
     chain = ({"context": retriever | (lambda docs:check_access(docs,role)) ,"question":RunnablePassthrough()}| prompt | llm | StrOutputParser())
 
-    return chain
+    return chain, retriever
 
 def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
@@ -85,7 +85,7 @@ def ask_question(username:str, question:str):
     if violation:
         return violation
     
-    chain = build_rag_chain("./chroma_db",role = role)
+    chain,_ = build_rag_chain("./chroma_db",role = role)
     raw_response = chain.invoke(question)
     safe_response = check_output_guardrail(raw_response)
     return safe_response
